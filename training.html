@@ -1,0 +1,552 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>筋トレ進捗管理アプリ</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header -->
+        <header class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex justify-between items-center">
+                <h1 class="text-3xl font-bold text-gray-800">
+                    <i class="fas fa-dumbbell text-blue-600"></i>
+                    筋トレ進捗管理
+                </h1>
+                <div class="text-right">
+                    <div class="text-lg font-semibold text-gray-700" id="currentDate"></div>
+                    <div class="text-sm text-gray-500">今日のワークアウト</div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <div class="bg-white rounded-lg shadow-md mb-6">
+            <nav class="flex">
+                <button onclick="showTab('training')" id="trainingTab" class="tab-button flex-1 py-4 px-6 text-center font-semibold text-blue-600 border-b-2 border-blue-600">
+                    <i class="fas fa-play-circle mr-2"></i>トレーニング
+                </button>
+                <button onclick="showTab('history')" id="historyTab" class="tab-button flex-1 py-4 px-6 text-center font-semibold text-gray-500">
+                    <i class="fas fa-history mr-2"></i>履歴
+                </button>
+                <button onclick="showTab('stats')" id="statsTab" class="tab-button flex-1 py-4 px-6 text-center font-semibold text-gray-500">
+                    <i class="fas fa-chart-line mr-2"></i>統計・グラフ
+                </button>
+            </nav>
+        </div>
+
+        <!-- Training Tab -->
+        <div id="trainingContent" class="tab-content">
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-gray-800">今日のトレーニングメニュー</h2>
+                    <button onclick="resetToday()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition duration-200">
+                        <i class="fas fa-redo mr-2"></i>リセット
+                    </button>
+                </div>
+                
+                <div class="grid gap-4" id="exerciseList"></div>
+                
+                <div class="mt-6 text-center">
+                    <button onclick="completeWorkout()" class="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-lg font-semibold transition duration-200">
+                        <i class="fas fa-check-circle mr-2"></i>ワークアウト完了
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- History Tab -->
+        <div id="historyContent" class="tab-content hidden">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">トレーニング履歴</h2>
+                <div class="mb-4">
+                    <input type="date" id="historyDate" class="border rounded-lg px-3 py-2 mr-2">
+                    <button onclick="showHistoryForDate()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg">
+                        <i class="fas fa-search mr-2"></i>検索
+                    </button>
+                </div>
+                <div id="historyDisplay"></div>
+            </div>
+        </div>
+
+        <!-- Stats Tab -->
+        <div id="statsContent" class="tab-content hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- 統計情報 -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">
+                        <i class="fas fa-chart-bar mr-2"></i>統計情報
+                    </h2>
+                    <div id="statsInfo"></div>
+                </div>
+
+                <!-- 進捗グラフ -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">
+                        <i class="fas fa-chart-line mr-2"></i>重量推移
+                    </h2>
+                    <div style="height: 300px;">
+                        <canvas id="weightChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- トレーニング頻度 -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">
+                        <i class="fas fa-calendar-alt mr-2"></i>月間トレーニング回数
+                    </h2>
+                    <div style="height: 300px;">
+                        <canvas id="frequencyChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- 部位別統計 -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">
+                        <i class="fas fa-user mr-2"></i>部位別完了率
+                    </h2>
+                    <div style="height: 300px;">
+                        <canvas id="bodyPartChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Exercise data
+        const exercises = [
+            { name: 'ベンチプレス', bodyPart: '胸', icon: 'fas fa-weight-hanging', defaultWeight: 60 },
+            { name: 'ラットプルダウン', bodyPart: '背中', icon: 'fas fa-arrows-alt-v', defaultWeight: 50 },
+            { name: 'ダンベルショルダープレス', bodyPart: '肩', icon: 'fas fa-dumbbell', defaultWeight: 20 },
+            { name: 'インクラインダンベルカール', bodyPart: '上腕二頭筋', icon: 'fas fa-dumbbell', defaultWeight: 15 },
+            { name: 'ライイングトライセプスエクステンション', bodyPart: '上腕三頭筋', icon: 'fas fa-dumbbell', defaultWeight: 25 },
+            { name: 'スクワット', bodyPart: '足', icon: 'fas fa-walking', defaultWeight: 80 },
+            { name: 'クランチ', bodyPart: '腹筋', icon: 'fas fa-male', defaultWeight: 0 }
+        ];
+
+        // Application state
+        let currentWorkout = {};
+        let trainingHistory = JSON.parse(localStorage.getItem('trainingHistory')) || {};
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            updateCurrentDate();
+            initializeWorkout();
+            renderExercises();
+        });
+
+        function updateCurrentDate() {
+            const today = new Date();
+            document.getElementById('currentDate').textContent = 
+                today.toLocaleDateString('ja-JP', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric',
+                    weekday: 'long'
+                });
+        }
+
+        function initializeWorkout() {
+            const today = getToday();
+            if (!trainingHistory[today]) {
+                currentWorkout = {};
+                exercises.forEach(exercise => {
+                    currentWorkout[exercise.name] = {
+                        weight: exercise.defaultWeight,
+                        sets: [false, false, false],
+                        completed: false
+                    };
+                });
+            } else {
+                currentWorkout = { ...trainingHistory[today] };
+            }
+        }
+
+        function getToday() {
+            return new Date().toISOString().split('T')[0];
+        }
+
+        function renderExercises() {
+            const container = document.getElementById('exerciseList');
+            container.innerHTML = '';
+
+            exercises.forEach(exercise => {
+                const exerciseData = currentWorkout[exercise.name];
+                const completedSets = exerciseData.sets.filter(Boolean).length;
+                
+                const exerciseCard = document.createElement('div');
+                exerciseCard.className = `border rounded-lg p-4 ${exerciseData.completed ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'}`;
+                
+                exerciseCard.innerHTML = `
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center">
+                            <i class="${exercise.icon} text-2xl text-blue-600 mr-3"></i>
+                            <div>
+                                <h3 class="font-semibold text-gray-800">${exercise.name}</h3>
+                                <p class="text-sm text-gray-600">${exercise.bodyPart}</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="flex items-center mb-2">
+                                <input type="number" 
+                                       value="${exerciseData.weight}" 
+                                       onchange="updateWeight('${exercise.name}', this.value)"
+                                       class="w-16 text-center border rounded px-2 py-1 mr-1">
+                                <span class="text-sm text-gray-600">kg</span>
+                            </div>
+                            <div class="text-sm text-gray-500">${completedSets}/3 セット完了</div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-center space-x-4">
+                        ${exerciseData.sets.map((completed, index) => `
+                            <button onclick="toggleSet('${exercise.name}', ${index})"
+                                    class="px-4 py-2 rounded-lg font-medium transition duration-200 ${
+                                        completed 
+                                            ? 'bg-green-500 text-white' 
+                                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                    }">
+                                セット${index + 1}
+                                ${completed ? '<i class="fas fa-check ml-1"></i>' : ''}
+                            </button>
+                        `).join('')}
+                    </div>
+                    
+                    <div class="mt-3">
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                                 style="width: ${(completedSets / 3) * 100}%"></div>
+                        </div>
+                    </div>
+                `;
+                
+                container.appendChild(exerciseCard);
+            });
+        }
+
+        function updateWeight(exerciseName, weight) {
+            currentWorkout[exerciseName].weight = parseInt(weight) || 0;
+            saveWorkout();
+        }
+
+        function toggleSet(exerciseName, setIndex) {
+            currentWorkout[exerciseName].sets[setIndex] = !currentWorkout[exerciseName].sets[setIndex];
+            
+            // Check if all sets are completed
+            const completedSets = currentWorkout[exerciseName].sets.filter(Boolean).length;
+            currentWorkout[exerciseName].completed = completedSets === 3;
+            
+            saveWorkout();
+            renderExercises();
+        }
+
+        function saveWorkout() {
+            const today = getToday();
+            trainingHistory[today] = { ...currentWorkout };
+            localStorage.setItem('trainingHistory', JSON.stringify(trainingHistory));
+        }
+
+        function resetToday() {
+            if (confirm('今日のトレーニング記録をリセットしますか？')) {
+                initializeWorkout();
+                renderExercises();
+                saveWorkout();
+            }
+        }
+
+        function completeWorkout() {
+            const completedExercises = exercises.filter(ex => currentWorkout[ex.name].completed).length;
+            
+            if (completedExercises === exercises.length) {
+                alert('🎉 お疲れ様でした！今日のワークアウトが完了しました！');
+            } else {
+                const remaining = exercises.length - completedExercises;
+                if (confirm(`まだ${remaining}種目が未完了です。ワークアウトを終了しますか？`)) {
+                    alert('お疲れ様でした！今日はここまでにしましょう。');
+                }
+            }
+            
+            saveWorkout();
+        }
+
+        // Tab functionality
+        function showTab(tabName) {
+            // Hide all content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            
+            // Remove active styles from all tabs
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('text-blue-600', 'border-b-2', 'border-blue-600');
+                button.classList.add('text-gray-500');
+            });
+            
+            // Show selected content
+            document.getElementById(tabName + 'Content').classList.remove('hidden');
+            
+            // Add active styles to selected tab
+            const activeTab = document.getElementById(tabName + 'Tab');
+            activeTab.classList.add('text-blue-600', 'border-b-2', 'border-blue-600');
+            activeTab.classList.remove('text-gray-500');
+            
+            // Load content based on tab
+            if (tabName === 'history') {
+                loadHistoryContent();
+            } else if (tabName === 'stats') {
+                loadStatsContent();
+            }
+        }
+
+        function loadHistoryContent() {
+            document.getElementById('historyDate').value = getToday();
+            showHistoryForDate();
+        }
+
+        function showHistoryForDate() {
+            const selectedDate = document.getElementById('historyDate').value;
+            const historyDisplay = document.getElementById('historyDisplay');
+            
+            if (!selectedDate) {
+                historyDisplay.innerHTML = '<p class="text-gray-500">日付を選択してください。</p>';
+                return;
+            }
+            
+            const dayData = trainingHistory[selectedDate];
+            
+            if (!dayData) {
+                historyDisplay.innerHTML = `
+                    <div class="text-center py-8">
+                        <i class="fas fa-calendar-times text-4xl text-gray-400 mb-4"></i>
+                        <p class="text-gray-500">${selectedDate}のトレーニング記録はありません。</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = `<div class="space-y-4">`;
+            
+            exercises.forEach(exercise => {
+                const exerciseData = dayData[exercise.name];
+                const completedSets = exerciseData.sets.filter(Boolean).length;
+                
+                html += `
+                    <div class="border rounded-lg p-4 ${exerciseData.completed ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center">
+                                <i class="${exercise.icon} text-xl text-blue-600 mr-3"></i>
+                                <div>
+                                    <h4 class="font-semibold">${exercise.name}</h4>
+                                    <p class="text-sm text-gray-600">${exercise.bodyPart}</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="font-semibold">${exerciseData.weight}kg</div>
+                                <div class="text-sm text-gray-500">${completedSets}/3 セット</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += `</div>`;
+            historyDisplay.innerHTML = html;
+        }
+
+        function loadStatsContent() {
+            updateStatsInfo();
+            createWeightChart();
+            createFrequencyChart();
+            createBodyPartChart();
+        }
+
+        function updateStatsInfo() {
+            const totalDays = Object.keys(trainingHistory).length;
+            const dates = Object.keys(trainingHistory).sort();
+            
+            let totalWorkouts = 0;
+            let totalSets = 0;
+            let totalWeight = 0;
+            
+            dates.forEach(date => {
+                const dayData = trainingHistory[date];
+                exercises.forEach(exercise => {
+                    const exerciseData = dayData[exercise.name];
+                    const completedSets = exerciseData.sets.filter(Boolean).length;
+                    totalSets += completedSets;
+                    totalWeight += exerciseData.weight * completedSets;
+                    if (exerciseData.completed) totalWorkouts++;
+                });
+            });
+            
+            const avgWeight = totalSets > 0 ? Math.round(totalWeight / totalSets) : 0;
+            
+            document.getElementById('statsInfo').innerHTML = `
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="text-center p-4 bg-blue-50 rounded-lg">
+                        <div class="text-2xl font-bold text-blue-600">${totalDays}</div>
+                        <div class="text-sm text-gray-600">総トレーニング日数</div>
+                    </div>
+                    <div class="text-center p-4 bg-green-50 rounded-lg">
+                        <div class="text-2xl font-bold text-green-600">${totalWorkouts}</div>
+                        <div class="text-sm text-gray-600">完了した種目数</div>
+                    </div>
+                    <div class="text-center p-4 bg-purple-50 rounded-lg">
+                        <div class="text-2xl font-bold text-purple-600">${totalSets}</div>
+                        <div class="text-sm text-gray-600">総セット数</div>
+                    </div>
+                    <div class="text-center p-4 bg-orange-50 rounded-lg">
+                        <div class="text-2xl font-bold text-orange-600">${avgWeight}kg</div>
+                        <div class="text-sm text-gray-600">平均重量</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function createWeightChart() {
+            const ctx = document.getElementById('weightChart').getContext('2d');
+            const dates = Object.keys(trainingHistory).sort().slice(-30); // Last 30 days
+            
+            const datasets = exercises.map((exercise, index) => {
+                const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#06B6D4', '#84CC16'];
+                return {
+                    label: exercise.name,
+                    data: dates.map(date => trainingHistory[date][exercise.name].weight),
+                    borderColor: colors[index % colors.length],
+                    backgroundColor: colors[index % colors.length] + '20',
+                    tension: 0.1
+                };
+            });
+            
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates.map(date => new Date(date).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })),
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: '重量 (kg)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createFrequencyChart() {
+            const ctx = document.getElementById('frequencyChart').getContext('2d');
+            const monthlyData = {};
+            
+            Object.keys(trainingHistory).forEach(date => {
+                const month = date.substring(0, 7); // YYYY-MM
+                if (!monthlyData[month]) monthlyData[month] = 0;
+                monthlyData[month]++;
+            });
+            
+            const months = Object.keys(monthlyData).sort();
+            const counts = months.map(month => monthlyData[month]);
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: months.map(month => {
+                        const [year, monthNum] = month.split('-');
+                        return `${year}年${monthNum}月`;
+                    }),
+                    datasets: [{
+                        label: 'トレーニング回数',
+                        data: counts,
+                        backgroundColor: '#3B82F6',
+                        borderColor: '#2563EB',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: '回数'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createBodyPartChart() {
+            const ctx = document.getElementById('bodyPartChart').getContext('2d');
+            const bodyPartStats = {};
+            
+            exercises.forEach(exercise => {
+                bodyPartStats[exercise.bodyPart] = { completed: 0, total: 0 };
+            });
+            
+            Object.values(trainingHistory).forEach(dayData => {
+                exercises.forEach(exercise => {
+                    const exerciseData = dayData[exercise.name];
+                    bodyPartStats[exercise.bodyPart].total++;
+                    if (exerciseData.completed) {
+                        bodyPartStats[exercise.bodyPart].completed++;
+                    }
+                });
+            });
+            
+            const bodyParts = Object.keys(bodyPartStats);
+            const completionRates = bodyParts.map(bodyPart => {
+                const stats = bodyPartStats[bodyPart];
+                return stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
+            });
+            
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: bodyParts,
+                    datasets: [{
+                        data: completionRates,
+                        backgroundColor: [
+                            '#3B82F6', '#EF4444', '#10B981', '#F59E0B', 
+                            '#8B5CF6', '#06B6D4', '#84CC16'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"rayId":"9747aac009d4d3f5","serverTiming":{"name":{"cfExtPri":true,"cfEdge":true,"cfOrigin":true,"cfL4":true,"cfSpeedBrain":true,"cfCacheStatus":true}},"version":"2025.8.0","token":"4edd5f8ec12a48cfa682ab8261b80a79"}' crossorigin="anonymous"></script>
+</body>
+</html>
+    <script id="html_badge_script1">
+        window.__genspark_remove_badge_link = "https://www.genspark.ai/api/html_badge/" +
+            "remove_badge?token=To%2FBnjzloZ3UfQdcSaYfDjC2iftfwL3qLeDvnDqEn0lBobBX2dt4jH0N2jvR34nf6oOWsX7Kuju9QeD7dET868zm5y05%2B9e0NzJ5aoQDYZmlKQnBzNOMXdwcrje42Il%2Brl36buM9NgbNBeTPbJ6ymtAleqhnwPQaqkGXk34ho2D8d%2FX7kIsat0R3PZ3jIjju%2FAt8be2NFOqZFupbF1G4%2BFia8GXlLyqGiR3naq%2BzDtuxyZd%2BRdbwVvQ7ElTQjMxZqVa1v3T%2BdF7iU5JJWHoGyx09diKkLhiNM3i%2FkTJJ3QID%2BSYiEnV9cdyBZDItun0ulE%2F86n75Jq57H3s8JbFn4hMDxkRkM6pAkAl2NOxMRKGcJR9Jkh%2BAMat%2BXhvvcM62Ag%2BWHJ8uY7NFZ2sQT%2BAEwPdbNTRX0FpERnKmWCuzWbZVdqFPb92QFNnjW6qlFft%2BLdE5fmMlSJLswC34CVC27CWaxEBtyB1BRdcXDR94OKq0nAZxTqh35FaTnXBsBfi6jGT7MQvQiQvn2ZqzbC0DOA%3D%3D";
+        window.__genspark_locale = "ja-JP";
+        window.__genspark_token = "To/BnjzloZ3UfQdcSaYfDjC2iftfwL3qLeDvnDqEn0lBobBX2dt4jH0N2jvR34nf6oOWsX7Kuju9QeD7dET868zm5y05+9e0NzJ5aoQDYZmlKQnBzNOMXdwcrje42Il+rl36buM9NgbNBeTPbJ6ymtAleqhnwPQaqkGXk34ho2D8d/X7kIsat0R3PZ3jIjju/At8be2NFOqZFupbF1G4+Fia8GXlLyqGiR3naq+zDtuxyZd+RdbwVvQ7ElTQjMxZqVa1v3T+dF7iU5JJWHoGyx09diKkLhiNM3i/kTJJ3QID+SYiEnV9cdyBZDItun0ulE/86n75Jq57H3s8JbFn4hMDxkRkM6pAkAl2NOxMRKGcJR9Jkh+AMat+XhvvcM62Ag+WHJ8uY7NFZ2sQT+AEwPdbNTRX0FpERnKmWCuzWbZVdqFPb92QFNnjW6qlFft+LdE5fmMlSJLswC34CVC27CWaxEBtyB1BRdcXDR94OKq0nAZxTqh35FaTnXBsBfi6jGT7MQvQiQvn2ZqzbC0DOA==";
+    </script>
+    
+    <script id="html_notice_dialog_script" src="https://www.genspark.ai/notice_dialog.js"></script>
+    
